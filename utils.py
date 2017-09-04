@@ -9,6 +9,7 @@ from torch.autograd import Variable
 
 import struct # get_image_size
 import imghdr # get_image_size
+import imgutils
 
 def sigmoid(x):
     return 1.0/(math.exp(-x)+1.)
@@ -89,7 +90,7 @@ def nms(boxes, nms_thresh):
 
     det_confs = torch.zeros(len(boxes))
     for i in range(len(boxes)):
-        det_confs[i] = 1-boxes[i][4]                
+        det_confs[i] = 1-boxes[i][4]
 
     _,sortIds = torch.sort(det_confs)
     out_boxes = []
@@ -142,7 +143,7 @@ def get_region_boxes(output, conf_thresh, num_classes, anchors, num_anchors, onl
     cls_max_confs = cls_max_confs.view(-1)
     cls_max_ids = cls_max_ids.view(-1)
     t1 = time.time()
-    
+
     sz_hw = h*w
     sz_hwa = sz_hw*num_anchors
     det_confs = convert2cpu(det_confs)
@@ -166,7 +167,7 @@ def get_region_boxes(output, conf_thresh, num_classes, anchors, num_anchors, onl
                         conf =  det_confs[ind]
                     else:
                         conf = det_confs[ind] * cls_max_confs[ind]
-    
+
                     if conf > conf_thresh:
                         bcx = xs[ind]
                         bcy = ys[ind]
@@ -234,7 +235,7 @@ def plot_boxes_cv2(img, boxes, savename=None, class_names=None, color=None):
         cv2.imwrite(savename, img)
     return img
 
-def plot_boxes(img, boxes, savename=None, class_names=None):
+def plot_boxes(img, boxes, savename=None, class_names=None, box_width=4):
     colors = torch.FloatTensor([[1,0,1],[0,0,1],[0,1,1],[0,1,0],[1,1,0],[1,0,0]]);
     def get_color(c, x, max_val):
         ratio = float(x)/max_val * 5
@@ -246,7 +247,7 @@ def plot_boxes(img, boxes, savename=None, class_names=None):
 
     width = img.width
     height = img.height
-    draw = ImageDraw.Draw(img)
+
     for i in range(len(boxes)):
         box = boxes[i]
         x1 = (box[0] - box[2]/2.0) * width
@@ -255,6 +256,7 @@ def plot_boxes(img, boxes, savename=None, class_names=None):
         y2 = (box[1] + box[3]/2.0) * height
 
         rgb = (255, 0, 0)
+        draw = ImageDraw.Draw(img)
         if len(box) >= 7 and class_names:
             cls_conf = box[5]
             cls_id = box[6]
@@ -266,7 +268,8 @@ def plot_boxes(img, boxes, savename=None, class_names=None):
             blue  = get_color(0, offset, classes)
             rgb = (red, green, blue)
             draw.text((x1, y1), class_names[cls_id], fill=rgb)
-        draw.rectangle([x1, y1, x2, y2], outline = rgb)
+        imgutils.draw_bbox(img, [x1, y1, x2, y2], color=rgb, width=box_width)
+
     if savename:
         print("save plot results to %s" % savename)
         img.save(savename)
@@ -385,7 +388,7 @@ def scale_bboxes(bboxes, width, height):
         dets[i][2] = dets[i][2] * width
         dets[i][3] = dets[i][3] * height
     return dets
-      
+
 def file_lines(thefilepath):
     count = 0
     thefile = open(thefilepath, 'rb')
@@ -402,7 +405,7 @@ def get_image_size(fname):
     from draco'''
     with open(fname, 'rb') as fhandle:
         head = fhandle.read(24)
-        if len(head) != 24: 
+        if len(head) != 24:
             return
         if imghdr.what(fname) == 'png':
             check = struct.unpack('>i', head[4:8])[0]
@@ -414,15 +417,15 @@ def get_image_size(fname):
         elif imghdr.what(fname) == 'jpeg' or imghdr.what(fname) == 'jpg':
             try:
                 fhandle.seek(0) # Read 0xff next
-                size = 2 
-                ftype = 0 
+                size = 2
+                ftype = 0
                 while not 0xc0 <= ftype <= 0xcf:
                     fhandle.seek(size, 1)
                     byte = fhandle.read(1)
                     while ord(byte) == 0xff:
                         byte = fhandle.read(1)
                     ftype = ord(byte)
-                    size = struct.unpack('>H', fhandle.read(2))[0] - 2 
+                    size = struct.unpack('>H', fhandle.read(2))[0] - 2
                 # We are at a SOFn block
                 fhandle.seek(1, 1)  # Skip `precision' byte.
                 height, width = struct.unpack('>HH', fhandle.read(4))
